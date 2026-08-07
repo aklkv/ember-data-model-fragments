@@ -12,48 +12,59 @@
  *     npx eslint --inspect-config
  *
  */
-import globals from 'globals';
-import js from '@eslint/js';
-
-import ember from 'eslint-plugin-ember/recommended';
-// import WarpDrive from 'eslint-plugin-warp-drive/recommended';
-import eslintConfigPrettier from 'eslint-config-prettier';
-import qunit from 'eslint-plugin-qunit';
-import n from 'eslint-plugin-n';
-
 import babelParser from '@babel/eslint-parser';
+import js from '@eslint/js';
+import { defineConfig, globalIgnores } from 'eslint/config';
+import prettier from 'eslint-config-prettier';
+import ember from 'eslint-plugin-ember/recommended';
+import importPlugin from 'eslint-plugin-import';
+import n from 'eslint-plugin-n';
+import qunit from 'eslint-plugin-qunit';
+import globals from 'globals';
+import ts from 'typescript-eslint';
 
 const esmParserOptions = {
   ecmaFeatures: { modules: true },
   ecmaVersion: 'latest',
-  requireConfigFile: false,
-  babelOptions: {
-    plugins: [
-      ['@babel/plugin-proposal-decorators', { decoratorsBeforeExport: true }],
-    ],
-  },
 };
 
-export default [
+const tsParserOptions = {
+  projectService: true,
+  tsconfigRootDir: import.meta.dirname,
+};
+
+/**
+ * The unsafe-`any` lint family, switched off.
+ *
+ * Both the addon internals and the test suite sit on ember-data API surfaces
+ * that ship no usable types, so `any` is load-bearing at those boundaries.
+ * See the individual blocks below for what each one is up against. Tighten
+ * incrementally as ember-data's types stabilize.
+ */
+const unsafeAnyRulesOff = {
+  '@typescript-eslint/no-explicit-any': 'off',
+  '@typescript-eslint/no-unsafe-argument': 'off',
+  '@typescript-eslint/no-unsafe-assignment': 'off',
+  '@typescript-eslint/no-unsafe-call': 'off',
+  '@typescript-eslint/no-unsafe-member-access': 'off',
+  '@typescript-eslint/no-unsafe-return': 'off',
+  '@typescript-eslint/unbound-method': 'off',
+};
+
+export default defineConfig([
+  globalIgnores([
+    'dist/',
+    'dist-*/',
+    'declarations/',
+    'node_modules/',
+    'coverage/',
+    '!**/.*',
+  ]),
   js.configs.recommended,
-  eslintConfigPrettier,
+  prettier,
   ember.configs.base,
   ember.configs.gjs,
-  // ...WarpDrive,
-  /**
-   * Ignores must be in their own object
-   * https://eslint.org/docs/latest/use/configure/ignore
-   */
-  {
-    ignores: [
-      'dist/',
-      'node_modules/',
-      'coverage/',
-      '**/*.ts',
-      '!**/.*',
-      'blueprints/*/files/**/*.js',
-    ],
-  },
+  ember.configs.gts,
   /**
    * https://eslint.org/docs/latest/use/configure/configuration-files#configuring-linter-options
    */
@@ -78,12 +89,63 @@ export default [
     },
   },
   {
+    files: ['**/*.{ts,gts}'],
+    languageOptions: {
+      parser: ember.parser,
+      parserOptions: tsParserOptions,
+      globals: {
+        ...globals.browser,
+      },
+    },
+    extends: [
+      ...ts.configs.recommendedTypeChecked,
+      // https://github.com/ember-cli/ember-addon-blueprint/issues/119
+      {
+        ...ts.configs.eslintRecommended,
+        files: undefined,
+      },
+      ember.configs.gts,
+    ],
+  },
+  {
+    files: ['src/**/*'],
+    plugins: {
+      import: importPlugin,
+    },
+    rules: {
+      // require relative imports use full extensions
+      'import/extensions': ['error', 'always', { ignorePackages: true }],
+    },
+  },
+  {
+    /**
+     * The addon integrates with ember-data by reaching into private API
+     * (`store._instanceCache`, the cache manager, snapshot internals, ...)
+     * that has no published types.
+     */
+    files: ['src/**/*.ts'],
+    rules: {
+      ...unsafeAnyRulesOff,
+      // Several public classes are built with `EmberObject.extend()`, whose
+      // type surface is declared as an interface beside the runtime value.
+      '@typescript-eslint/no-unsafe-declaration-merging': 'off',
+    },
+  },
+  {
     ...qunit.configs.recommended,
-    files: ['tests/**/*-test.{js,gjs}'],
+    files: ['tests/**/*-test.{js,gjs,ts,gts}'],
     plugins: {
       qunit,
     },
     rules: {
+      /**
+       * The suite drives ember-data through its legacy string-keyed API
+       * (`store.push`, `peekRecord`, `pushPayload`, ...), which resolves to
+       * `unknown` without a per-call-site model type argument, and asserts
+       * against private cache internals. The shared `store` / `owner` /
+       * record handles are therefore untyped.
+       */
+      ...unsafeAnyRulesOff,
       'ember/no-runloop': 'off',
     },
   },
@@ -91,21 +153,7 @@ export default [
    * CJS node files
    */
   {
-    ...n.configs['flat/recommended-script'],
-    files: [
-      '**/*.cjs',
-      'blueprints/**/*.js',
-      'config/**/*.js',
-      'lib/**/*.js',
-      'tests/dummy/config/**/*.js',
-      'testem.js',
-      'testem*.js',
-      'index.js',
-      '.prettierrc.js',
-      '.stylelintrc.js',
-      '.template-lintrc.js',
-      'ember-cli-build.js',
-    ],
+    files: ['**/*.cjs'],
     plugins: {
       n,
     },
@@ -122,7 +170,6 @@ export default [
    * ESM node files
    */
   {
-    ...n.configs['flat/recommended-module'],
     files: ['**/*.mjs'],
     plugins: {
       n,
@@ -137,4 +184,19 @@ export default [
       },
     },
   },
-];
+  /**
+   * Blueprint files: index.js is CJS (consumed by ember-cli at runtime in
+   * the host app), template files under blueprints/<name>/files/ are ESM
+   * fragments processed by the blueprint engine.
+   */
+  {
+    files: ['blueprints/*/index.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  globalIgnores(['blueprints/*/files/']),
+]);

@@ -24,16 +24,16 @@ Use the following table to decide which version of this project to use with your
 
 ## Installation
 
-To install as an Ember CLI addon:
-
 ```sh
-$ ember install ember-data-model-fragments
+$ pnpm add ember-data-model-fragments
+# or: npm install ember-data-model-fragments
+# or: yarn add ember-data-model-fragments
 ```
 
 You may then start creating fragments with:
 
 ```sh
-$ ember generate fragment foo someAttr:string anotherAttr:boolean
+ember generate fragment foo someAttr:string anotherAttr:boolean
 ```
 
 Which will create the module `app/models/foo.js` which exports a `Fragment` class with the given attributes.
@@ -709,28 +709,35 @@ Currently, fragments cannot have normal `belongsTo` or `hasMany` relationships. 
 
 ## Testing
 
-Building requires [Ember CLI](http://www.ember-cli.com/) and running tests requires [Test 'Em](https://github.com/airportyh/testem), which can all be installed globally with:
+This addon uses [Vite](https://vite.dev/), [Testem](https://github.com/testem/testem) and [QUnit](https://qunitjs.com/) to run tests against the demo app located in `demo-app/`.
+
+Install dependencies:
 
 ```sh
-$ yarn global add ember-cli
+ pnpm install
 ```
 
-Then install NPM packages and start the development test server:
+Run the test suite:
 
 ```sh
-$ yarn
-$ ember test --server
+ pnpm test
 ```
 
-It is also possible to run the tests in a headless fashion. This requires [PhantomJS 2](http://phantomjs.org) to be installed.
+Start the demo app dev server:
 
 ```sh
-$ ember test
-
-# Using `yarn test` will invoke `ember try:testall`.
-# This will test each version of ember supported by this addon.
-$ yarn test
+ pnpm start
 ```
+
+> TODO: Document the package's public API.
+>
+> For each public api (including components, helpers, modifiers, and other apis) include:
+>
+> - The import path for a consumer (e.g. `import MyAddonsComponent from 'my-addon/components/my-addons-component'`)
+> - What it does
+> - Parameters/options
+> - Return value
+> - Example usage
 
 ## Contributing
 
